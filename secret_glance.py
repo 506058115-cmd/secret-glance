@@ -61,7 +61,7 @@ def inspect_file(path):
     return sorted(set(findings)), None
 
 
-def walk(path):
+def walk(path, errors):
     if path.is_symlink():
         return
     if path.is_file():
@@ -69,7 +69,7 @@ def walk(path):
         return
     if not path.is_dir():
         return
-    for root, dirs, files in os.walk(path, followlinks=False):
+    for root, dirs, files in os.walk(path, followlinks=False, onerror=errors.append):
         dirs[:] = sorted(name for name in dirs if name not in SKIP_DIRS and not (Path(root) / name).is_symlink())
         for name in sorted(files):
             yield Path(root) / name
@@ -90,7 +90,8 @@ def main(argv=None):
             print(f"secret-glance: path not found: {root}", file=sys.stderr)
             errors += 1
             continue
-        for path in walk(root):
+        walk_errors = []
+        for path in walk(root, walk_errors):
             try:
                 identity = path.resolve()
             except OSError:
@@ -106,6 +107,9 @@ def main(argv=None):
             for number, label in findings:
                 print(f"{path}:{number}: {label}")
                 findings_count += 1
+        for error in walk_errors:
+            print(f"secret-glance: {error.filename}: {error.strerror}", file=sys.stderr)
+            errors += 1
 
     if not findings_count and not errors:
         print("No likely secrets found.")
